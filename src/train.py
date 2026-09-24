@@ -64,7 +64,8 @@ def main():
         cfg["model"]["pretrained"],
     ).to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    class_weights = class_info["class_weights"].to(device)
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=cfg["train"]["lr"],
