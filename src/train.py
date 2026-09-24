@@ -1,5 +1,6 @@
 """Boucle d'entraînement."""
 import argparse
+import os
 
 import torch
 import torch.nn as nn
@@ -91,6 +92,11 @@ def main():
     )
 
     class_names = class_info["class_names"]
+    output_dir = cfg["train"]["output_dir"]
+    os.makedirs(output_dir, exist_ok=True)
+    best_path = os.path.join(output_dir, "best_model.pt")
+    best_f1 = -1.0
+
     for epoch in range(cfg["train"]["epochs"]):
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer, device)
         metrics = evaluate(model, val_loader, criterion, device, class_names)
@@ -101,6 +107,23 @@ def main():
             f"macro_f1 {metrics['macro_f1']:.4f} | "
             f"recall_mel {metrics['recall_mel']:.4f}"
         )
+
+        if metrics["macro_f1"] > best_f1:
+            best_f1 = metrics["macro_f1"]
+            torch.save(
+                {
+                    "epoch": epoch + 1,
+                    "model_state_dict": model.state_dict(),
+                    "metrics": metrics,
+                    "class_names": class_names,
+                    "model_name": cfg["model"]["name"],
+                    "num_classes": cfg["model"]["num_classes"],
+                },
+                best_path,
+            )
+            print(f"  -> nouveau meilleur macro_f1 {best_f1:.4f}, sauvé dans {best_path}")
+
+    print(f"Entraînement terminé. Meilleur macro_f1: {best_f1:.4f}")
 
 
 if __name__ == "__main__":
