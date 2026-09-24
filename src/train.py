@@ -4,6 +4,7 @@ import argparse
 import torch
 import torch.nn as nn
 import yaml
+from sklearn.metrics import balanced_accuracy_score, f1_score, recall_score
 
 # Phase 1 : bouchon. Plus tard -> from src.data import build_dataloaders
 from src.data_stub import build_dataloaders
@@ -27,10 +28,11 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
 
 
 @torch.no_grad()
-def evaluate(model, loader, criterion, device):
+def evaluate(model, loader, criterion, device, class_names):
     model.eval()
     running_loss = 0.0
-    correct = 0
+    all_preds = []
+    all_labels = []
     for images, labels in loader:
         images, labels = images.to(device), labels.to(device)
         outputs = model(images)
@@ -38,10 +40,26 @@ def evaluate(model, loader, criterion, device):
 
         running_loss += loss.item() * images.size(0)
         preds = outputs.argmax(dim=1)
-        correct += (preds == labels).sum().item()
+        all_preds.append(preds.cpu())
+        all_labels.append(labels.cpu())
 
-    n = len(loader.dataset)
-    return running_loss / n, correct / n
+    y_pred = torch.cat(all_preds).numpy()
+    y_true = torch.cat(all_labels).numpy()
+
+    labels_idx = list(range(len(class_names)))
+    recall_per_class = recall_score(
+        y_true, y_pred, labels=labels_idx, average=None, zero_division=0
+    )
+    mel_idx = class_names.index("mel")
+
+    return {
+        "loss": running_loss / len(loader.dataset),
+        "balanced_acc": balanced_accuracy_score(y_true, y_pred),
+        "macro_f1": f1_score(
+            y_true, y_pred, labels=labels_idx, average="macro", zero_division=0
+        ),
+        "recall_mel": recall_per_class[mel_idx],
+    }
 
 
 def main():
@@ -72,12 +90,16 @@ def main():
         weight_decay=cfg["train"]["weight_decay"],
     )
 
+    class_names = class_info["class_names"]
     for epoch in range(cfg["train"]["epochs"]):
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer, device)
-        val_loss, val_acc = evaluate(model, val_loader, criterion, device)
+        metrics = evaluate(model, val_loader, criterion, device, class_names)
         print(
             f"Epoch {epoch + 1:2d}/{cfg['train']['epochs']} | "
-            f"train_loss {train_loss:.4f} | val_loss {val_loss:.4f} | val_acc {val_acc:.4f}"
+            f"train_loss {train_loss:.4f} | val_loss {metrics['loss']:.4f} | "
+            f"bal_acc {metrics['balanced_acc']:.4f} | "
+            f"macro_f1 {metrics['macro_f1']:.4f} | "
+            f"recall_mel {metrics['recall_mel']:.4f}"
         )
 
 
