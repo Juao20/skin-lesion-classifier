@@ -7,8 +7,7 @@ import torch.nn as nn
 import yaml
 from sklearn.metrics import balanced_accuracy_score, f1_score, recall_score
 
-# Phase 1 : bouchon. Plus tard -> from src.data import build_dataloaders
-from src.data_stub import build_dataloaders
+from src.data import build_dataloaders
 from src.model import build_model
 
 
